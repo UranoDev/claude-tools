@@ -74,6 +74,16 @@ Para cinco scripts no vale la pena.
 Por eso existe `.tooling-version`: dice qué commit quedó instalado, que es lo
 que se necesita para saber qué proyectos están atrasados.
 
+## Cambiar una herramienta
+
+**El arreglo va aquí, nunca en la copia del proyecto.** Un arreglo hecho en el
+proyecto sobrevive hasta el primer `install.ps1 -Force` y después desaparece sin
+dejar rastro.
+
+El procedimiento completo —cómo probarlo, por qué la segunda corrida importa,
+cómo propagarlo y qué archivos no se deben forzar— está en
+**[docs/flujo-de-cambios.md](docs/flujo-de-cambios.md)**.
+
 ## Credenciales
 
 Los scripts resuelven URL y token de YouTrack por cascada, del más específico
