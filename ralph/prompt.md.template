@@ -1,0 +1,72 @@
+# Prompt del loop de construcción — {{PROJECT_NAME}} ({{PROJECT_KEY}})
+
+Este es el texto que `ralph.ps1` pasa como `-p` a cada invocación de `claude`. Aquí va solo el **protocolo operativo** de una vuelta del loop.
+
+> **Leé el contexto antes de tocar código.** Este repo **no** tiene `CLAUDE.md`, así que nada se carga solo:
+>
+> - `CONTEXT.md` — el glosario del dominio. Es la fuente de la terminología: usá esos términos en el código, en la interfaz y en los textos.
+> - `docs/adr/` — las decisiones ya tomadas, con su porqué. Algunas son contraintuitivas **a propósito**. No las reviertas sin leerlas primero.
+> - `AGENTS.md` y `docs/agents/` — convenciones del tracker.
+
+<!--
+  AL INSTALAR: enumerá arriba los términos concretos del glosario de este
+  proyecto y las decisiones de `docs/adr/` que más fácil se revierten por
+  descuido. Un agente que lee "usá los términos del glosario" sin la lista
+  igual tiene que abrir CONTEXT.md; uno que lee la lista reconoce el término
+  cuando lo ve. Borrá este comentario cuando lo hayas hecho.
+-->
+
+> **Nota de rutas:** la invocación corre con el directorio de trabajo en la raíz del repo, no dentro de `.ralph/`. Por eso todas las rutas abajo llevan el prefijo `.ralph/`.
+
+> **Tracker:** las tareas viven en YouTrack (proyecto `{{PROJECT_KEY}}`). Usá las tools MCP de YouTrack (`search_issues`, `get_issue`, `update_issue`, `add_issue_comment`) para todo lo que tenga que ver con tareas — en el repo no hay ningún archivo de tareas. La descripción de cada issue trae su alcance y una sección `## Criterios`; ahí está la spec completa.
+
+## Protocolo de una invocación
+
+1. `search_issues` con la query `project: {{PROJECT_KEY}} Triage: ready-for-agent State: -Fixed` para listar candidatas.
+2. Si no hay ninguna candidata (o ninguna queda libre de bloqueos tras el paso 3): no hacer cambios de código, agregar una entrada en `.ralph/log.md` indicando `sin tareas disponibles`, y terminar la respuesta con la línea literal `<promise>COMPLETE</promise>` en su propia línea.
+3. Entre las candidatas, tomar la de **menor ID numérico** y verificar que no esté bloqueada.
+
+   Las dependencias **no** están escritas en la descripción: son enlaces formales de YouTrack. Esta instancia no tiene el tipo `blocked by`, así que un bloqueo se representa con `depends on`. `get_issue` solo devuelve `linkedIssueCounts` (cuántos enlaces hay, no cuáles), así que hay que consultarlos:
+
+   - `search_issues` con la query `is required for: <ID-de-la-candidata>` → devuelve **exactamente los issues que la bloquean**.
+   - **Ojo con la dirección, es fácil invertirla:** `depends on: <ID>` devuelve lo contrario — los issues que dependen de ella, que no bloquean nada.
+   - Si no devuelve ninguno: está disponible, seguir al paso 4.
+   - Si devuelve uno o más: todos tienen que estar en `State` `Fixed` o `Verified`. Si alguno no lo está, descartar esta candidata y repetir el paso 3 con la siguiente por ID ascendente.
+
+   No te apoyes en que el ID menor sea seguro por sí solo: que las dependencias apunten a IDs más chicos suele ser una coincidencia del backlog inicial, no una garantía.
+4. Ejecutar la tarea: construir el código correspondiente, usando la descripción del issue como fuente de la spec. Las descripciones están en español, con su alcance y una sección `## Criterios` con los criterios de aceptación. **No busques encabezados `What to build` ni `Acceptance criteria`: no existen en este proyecto.**
+5. **Una tarea por invocación.** No continuar con la siguiente aunque sobre tiempo o contexto — el loop ya se encarga de la siguiente vuelta.
+6. Resultado:
+   - **Si quedó completa y funcionando:** `update_issue` sobre el issue con `customFields: { 'State': 'Fixed' }`.
+   - **Si algo bloquea la tarea** (ambigüedad no resuelta, credencial/API key faltante, error que no se pudo resolver): **no** tocar `State`. En cambio, `update_issue` con `customFields: { 'Triage': 'ready-for-human' }` — esto la saca de la búsqueda de candidatas (paso 1) hasta que una persona la revise y la devuelva a `ready-for-agent`. Terminar la respuesta con la línea literal `<promise>BLOCKED</promise>` en su propia línea.
+7. En ambos casos (completada o bloqueada), `add_issue_comment` sobre el issue con el mismo contenido que la entrada de `.ralph/log.md` (ver formato abajo). El costo del ciclo **no** va en este comentario — de eso se encarga `ralph.ps1` aparte, en un comentario propio.
+8. Agregar una entrada en `.ralph/log.md` siguiendo el formato de la plantilla (ver abajo).
+9. **Antes de terminar, volver a correr la búsqueda.** No confíes en la lista que leíste al principio de esta invocación: la acabás de modificar vos. Repetir la query del paso 1 y, sobre lo que devuelva, **volver a aplicar el chequeo de bloqueos del paso 3** (`is required for: <ID>`). Una candidata bloqueada **no** cuenta como disponible.
+   - Si queda **al menos una candidata disponible** — sin bloqueadores, o con todos sus bloqueadores en `Fixed`/`Verified` —: **no** agregar `<promise>COMPLETE</promise>`. Terminar sin ninguna línea de señal y dejar que el loop siga solo.
+   - Si **no** queda ninguna disponible —sea porque la query no devolvió nada, sea porque todo lo que devolvió está bloqueado—: agregar `<promise>COMPLETE</promise>`.
+
+   No alcanza con que la query devuelva filas. Si están todas bloqueadas y aun así callás el `COMPLETE`, el loop arranca una invocación entera —que se cobra— nada más que para descubrir en la vuelta siguiente lo que ya se sabía en ésta. Es el mismo criterio del paso 2, aplicado al final en vez de al principio.
+10. Terminar la invocación. No seguir con más tareas.
+
+## Formato de entrada en `.ralph/log.md`
+
+`.ralph/log.md` tiene dos partes: una **tabla de métricas** al inicio (iteración, tarea, modelo, duración, tokens, costo) que administra `ralph.ps1` automáticamente — **no la edites** — y, debajo, la **bitácora narrativa** por tarea, que sí llenas tú. Cada invocación agrega **una** entrada nueva al final de esa bitácora:
+
+```
+## {{PROJECT_KEY}}-2 — Título breve de la tarea
+**Estado:** Completada | Bloqueada
+**Resumen:** qué se construyó, en 2-3 líneas.
+**Decisiones tomadas:** cualquier ambigüedad resuelta durante la implementación que no estaba ya en la descripción del issue (si no hubo, omitir esta línea).
+**Bloqueo:** (solo si Estado = Bloqueada) qué falta para desbloquear.
+**Archivos:** lista de archivos creados/modificados.
+```
+
+No incluyas costo ni sesión en esta entrada — `ralph.ps1` ya lleva esa métrica aparte, cruzada por el ID del issue de YouTrack (`{{PROJECT_KEY}}-N`) que detecta leyendo el encabezado `## {{PROJECT_KEY}}-N` que tú acabas de escribir.
+
+## Señales de fin para el loop
+
+- **No hay tareas disponibles** (paso 2, al arrancar la invocación): termina tu respuesta con `<promise>COMPLETE</promise>`.
+- **La tarea de esta invocación quedó bloqueada** (paso 6): termina tu respuesta con `<promise>BLOCKED</promise>`.
+- **La tarea se completó:** volvé a chequear candidatas (paso 9) antes de decidir, **contando los bloqueos**. Si no queda ninguna disponible, termina con `<promise>COMPLETE</promise>`. Si queda al menos una disponible, no agregues ninguna de las dos líneas — el loop simplemente continúa a la siguiente iteración.
+
+**Importante:** `<promise>COMPLETE</promise>` nunca debe basarse en la lista de candidatas leída al principio de la invocación (paso 1) — siempre en una búsqueda hecha justo antes de terminar (paso 2 o paso 9, según el caso). El backlog puede tener más de una tarea pendiente aunque esta invocación solo haya trabajado una.
