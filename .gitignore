@@ -2,3 +2,6 @@
 # Aqui van los residuos de probar el instalador.
 *.zip
 /tmp/
+
+# Config local de YouTrack: puede contener un token permanente.
+/.ralph
