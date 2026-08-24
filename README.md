@@ -119,6 +119,28 @@ instancia —que no es secreto— viajen con el código, y el token no.
 
 6. `.ralph/ralph.ps1` para arrancar el loop
 
+## Correr el loop por grupos
+
+Por defecto `ralph.ps1` toma cualquier candidata del backlog. Para acotar la corrida
+a un grupo concreto —y poder revisar y commitear ese grupo junto— se le pasa la lista:
+
+```powershell
+.ralph/ralph.ps1 -Issues ACME-20,ACME-21
+```
+
+Dos cosas que el parámetro **no** hace, y son deliberadas:
+
+- **No reemplaza el filtro de `Triage`, se suma a él.** Un issue de la lista que no esté
+  en `ready-for-agent` se salta y se menciona. Si estaba en `ready-for-human` era porque
+  tenía decisiones sin resolver, y ejecutarlo significaría que el agente las invente.
+- **No salta las dependencias.** Un issue de la lista bloqueado por otro que no está en
+  la lista se descarta igual. Enumerar IDs no vuelve seguro ignorar el grafo.
+
+**El loop sigue sin commitear.** Qué y cuándo se commitea lo decide una persona, después
+de revisar lo que la corrida produjo.
+
+Sin `-Issues`, el comportamiento es exactamente el de siempre.
+
 ## Sobre `.git`
 
 Ni `install.ps1` ni `bootstrap.ps1` tocan `.git`, ni el propio ni el del

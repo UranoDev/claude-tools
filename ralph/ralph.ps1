@@ -2,22 +2,31 @@ param(
     [int]$Iterations = 10,
     [string]$Model = "claude-opus-5",
 
+    # Acota la corrida a estos issues. Sin el parametro, el loop se comporta
+    # exactamente como antes: toma cualquier candidata del backlog.
+    [string[]]$Issues = @(),
+
     [Alias("v")]
     [switch]$Version
 )
 # Otro modelo más económico: claude-sonnet-5
 # Version del script (bump manual cuando haya cambios relevantes en la logica del loop).
-$ScriptVersion = "1.0.0"
+$ScriptVersion = "1.1.0"
 
 if ($Version) {
     Write-Host "ralph.ps1 v$ScriptVersion - loop de construccion (patron Ralph Wiggum)"
     Write-Host ""
     Write-Host "Uso:"
-    Write-Host "  ralph.ps1 [-Iterations <int>] [-Model <string>] [-Version | -v]"
+    Write-Host "  ralph.ps1 [-Iterations <int>] [-Model <string>] [-Issues <lista>] [-Version | -v]"
     Write-Host ""
     Write-Host "Parametros:"
     Write-Host "  -Iterations <int>   Numero maximo de iteraciones del loop (default: 10)"
     Write-Host "  -Model <string>     Modelo a invocar con 'claude -p' (default: claude-opus-5)"
+    Write-Host "  -Issues <lista>     Acota la corrida a estos issues, separados por coma."
+    Write-Host "                      Ej: -Issues ACME-20,ACME-21"
+    Write-Host "                      Se SUMA al filtro de Triage, no lo reemplaza: un issue"
+    Write-Host "                      listado que no este en ready-for-agent se salta."
+    Write-Host "                      Las dependencias 'depends on' siguen aplicando."
     Write-Host "  -Version, -v        Muestra esta informacion y termina sin ejecutar el loop"
     exit 0
 }
@@ -122,6 +131,50 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 $promptPath = Join-Path $PSScriptRoot "prompt.md"
 $logPath = Join-Path $PSScriptRoot "log.md"
+
+# --------------------------------------------------------------- acotacion ---
+# Con -Issues la corrida se limita a una lista explicita. En vez de tocar el
+# protocolo de prompt.md --que es el mismo en todos los proyectos-- se antepone
+# un bloque que restringe ESTA corrida. Asi el protocolo sigue siendo uno solo y
+# la acotacion vive donde pertenece: en la invocacion.
+$issuesPrefix = ""
+if ($Issues.Count -gt 0) {
+    # PowerShell ya separa por coma al enlazar a [string[]], pero alguien puede
+    # pasar la lista entrecomillada; se normaliza en ambos casos.
+    $listaIssues = @(
+        $Issues |
+            ForEach-Object { $_ -split ',' } |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ } |
+            # A mayusculas: los IDs de YouTrack lo son, y pelearse con la caja
+            # de una letra no deberia costarle una corrida a nadie.
+            ForEach-Object { $_.ToUpperInvariant() }
+    )
+
+    $invalidos = @($listaIssues | Where-Object { $_ -notmatch '^[A-Z][A-Z0-9]{1,9}-[0-9]+$' })
+    if ($invalidos.Count -gt 0) {
+        # Se avisa al arrancar y no a mitad de la corrida: un ID mal escrito
+        # significa que algo no se va a trabajar, y enterarse 20 minutos despues
+        # es enterarse cuando ya no sirve.
+        Write-Error ("IDs de issue invalidos: {0}. Formato esperado: PROY-123." -f ($invalidos -join ', '))
+        exit 1
+    }
+
+    $listaTexto = $listaIssues -join ', '
+    Write-Host "Corrida acotada a: $listaTexto" -ForegroundColor Yellow
+
+    $issuesPrefix = @"
+> **CORRIDA ACOTADA.** Esta invocacion solo puede trabajar estos issues: $listaTexto
+>
+> Aplica el protocolo de abajo con dos restricciones que **no** son negociables:
+>
+> - La busqueda del paso 1 se limita a esos IDs **ademas** del filtro de Triage, no en su lugar. Un issue de la lista que no este en `ready-for-agent` se salta y se menciona en la respuesta; no se trabaja. Si estaba en `ready-for-human` era por algo.
+> - El chequeo de dependencias del paso 3 sigue aplicando sin excepcion. Un issue de la lista bloqueado por otro que **no** esta en la lista se descarta igual: que alguien enumere IDs no vuelve seguro saltarse un bloqueo real.
+>
+> Si ninguno de los issues listados queda disponible, termina con ``<promise>COMPLETE</promise>``.
+
+"@
+}
 
 # Inserta una linea de metricas (tiempo + tokens + costo) dentro de la tabla especial
 # de costos al inicio de log.md en orden cronologico inverso (mas reciente primero).
@@ -281,7 +334,7 @@ for ($i = 1; $i -le $Iterations; $i++) {
     Write-Host ""
     Write-Host "=== Iteracion $i de $Iterations [Modelo: $Model] ===" -ForegroundColor Cyan
 
-    $prompt = Get-Content -Path $promptPath -Raw -Encoding utf8
+    $prompt = $issuesPrefix + (Get-Content -Path $promptPath -Raw -Encoding utf8)
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
     # Invocar la CLI de claude saltando los permisos para la ejecucion automatizada.
