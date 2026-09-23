@@ -137,7 +137,9 @@ Dos cosas que el parámetro **no** hace, y son deliberadas:
   la lista se descarta igual. Enumerar IDs no vuelve seguro ignorar el grafo.
 
 **El loop sigue sin commitear.** Qué y cuándo se commitea lo decide una persona, después
-de revisar lo que la corrida produjo.
+de revisar lo que la corrida produjo. La regla está escrita en `ralph/prompt.md.template`,
+que es lo que el agente lee en cada vuelta. La única excepción es un issue cuya descripción
+pida el commit explícitamente.
 
 Sin `-Issues`, el comportamiento es exactamente el de siempre.
 

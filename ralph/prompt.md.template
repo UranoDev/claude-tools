@@ -20,6 +20,16 @@ Este es el texto que `ralph.ps1` pasa como `-p` a cada invocación de `claude`. 
 
 > **Tracker:** las tareas viven en YouTrack (proyecto `{{PROJECT_KEY}}`). Usá las tools MCP de YouTrack (`search_issues`, `get_issue`, `update_issue`, `add_issue_comment`) para todo lo que tenga que ver con tareas — en el repo no hay ningún archivo de tareas. La descripción de cada issue trae su alcance y una sección `## Criterios`; ahí está la spec completa.
 
+> **Git: esta invocación no commitea.** No corras `git commit`, `git push`, `git tag`, `git stash`, `git reset` ni nada que reescriba la historia o deshaga cambios. Los cambios se quedan sin commitear en el árbol de trabajo: una persona los revisa y decide qué se commitea y cuándo, a veces agrupando varios issues en un solo commit.
+>
+> **La única excepción es que la descripción del issue pida el commit de forma explícita** (por ejemplo, un criterio que diga «commitear al terminar»). Que el issue esté completo no cuenta como pedirlo. Si lo pide:
+>
+> - Agregá solo los archivos que tocó esta tarea (`git add <archivo>`, nunca `git add -A` ni `git add .`). Nada de `.ralph/` entra en el commit.
+> - El asunto empieza con el ID del issue: `{{PROJECT_KEY}}-N: <qué cambió>`.
+> - El autor es la identidad de `git config` que ya está configurada. No agregues ninguna línea `Co-Authored-By` ni cambies el autor.
+> - No uses `--no-verify`. Si un hook falla, arreglá la causa o marcá la tarea como bloqueada (paso 6).
+> - `git push` solo si el issue también lo pide explícitamente.
+
 ## Protocolo de una invocación
 
 1. `search_issues` con la query `project: {{PROJECT_KEY}} Triage: ready-for-agent State: -Fixed` para listar candidatas.
