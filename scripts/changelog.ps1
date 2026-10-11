@@ -292,7 +292,9 @@ if ($Mode -in @('DateWindow', 'TagWindow')) {
     $output.Add('# Changelog')
     $output.Add('')
 
-    if ($unreleased.Count -gt 0) {
+    # With -AsVersion the heading is always written, even with no issues closed
+    # since the last tag: the app reads its deployed version off this heading.
+    if ($unreleased.Count -gt 0 -or $AsVersion) {
         if ($AsVersion) {
             # If a tag with this exact CalVer already exists (same-day re-cut),
             # bump with .1, .2, ... so each version stays unique.
