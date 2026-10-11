@@ -1,6 +1,6 @@
 param(
     [int]$Iterations = 10,
-    [string]$Model = "claude-opus-5",
+    [string]$Model = "claude-sonnet-5-5",
 
     # Acota la corrida a estos issues. Sin el parametro, el loop se comporta
     # exactamente como antes: toma cualquier candidata del backlog.
@@ -9,7 +9,7 @@ param(
     [Alias("v")]
     [switch]$Version
 )
-# Otro modelo más económico: claude-sonnet-5
+# Otro modelo, más caro: claude-opus-5-5
 # Version del script (bump manual cuando haya cambios relevantes en la logica del loop).
 $ScriptVersion = "1.1.0"
 
@@ -21,7 +21,7 @@ if ($Version) {
     Write-Host ""
     Write-Host "Parametros:"
     Write-Host "  -Iterations <int>   Numero maximo de iteraciones del loop (default: 10)"
-    Write-Host "  -Model <string>     Modelo a invocar con 'claude -p' (default: claude-opus-5)"
+    Write-Host "  -Model <string>     Modelo a invocar con 'claude -p' (default: claude-sonnet-5-5)"
     Write-Host "  -Issues <lista>     Acota la corrida a estos issues, separados por coma."
     Write-Host "                      Ej: -Issues ACME-20,ACME-21"
     Write-Host "                      Se SUMA al filtro de Triage, no lo reemplaza: un issue"
